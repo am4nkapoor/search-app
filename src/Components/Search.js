@@ -1,6 +1,9 @@
+/* eslint-disable no-restricted-globals */
 import React from 'react';
+// import '../Search.css';
 import axios from 'axios';
 import Loader from '../loader.gif';
+import PageNavigation from './PageNavigation';
 
 class Search extends React.Component {
 
@@ -9,28 +12,42 @@ class Search extends React.Component {
 
 		this.state = {
 			query: '',
-			results: [],
+			results: {},
 			loading: false,
-      message: '',
-      search: '',
-			visible: 6,
-			loadmore: false,
-    };
-    
-    this.loadMore = this.loadMore.bind(this) 
+			message: '',
+			totalResults: 0,
+			totalPages: 0,
+			currentPageNo: 0,
+		};
+
 		this.cancel = '';
 	}
+
+
+	/**
+	 * Get the Total Pages count.
+	 *
+	 * @param total
+	 * @param denominator Count of results per page
+	 * @return {number}
+	 */
+	getPageCount = ( total, denominator ) => {
+		const divisible	= 0 === total % denominator;
+		const valueToBeAdded = divisible ? 0 : 1;
+		return Math.floor( total/denominator ) + valueToBeAdded;
+	};
 
 	/**
 	 * Fetch the search results and update the state with the result.
 	 * Also cancels the previous query before making the new one.
 	 *
+	 * @param {int} updatedPageNo Updated Page No.
 	 * @param {String} query Search Query.
 	 *
 	 */
-	fetchSearchResults = ( query ) => {
-
-		const searchUrl = `https://api.jikan.moe/v3/search/anime?q=naruto&limit=16`;
+	fetchSearchResults = ( updatedPageNo = '', query ) => {
+		const pageNumber = updatedPageNo ? `&page=${updatedPageNo}` : '';
+		const searchUrl = `https://pixabay.com/api/?key=16658384-e7cc3fd282f5d453520c1fe5f&q=${query}${pageNumber}`;
 
 		if( this.cancel ) {
 			this.cancel.cancel();
@@ -42,24 +59,79 @@ class Search extends React.Component {
 			cancelToken: this.cancel.token
 		} )
 			.then( res => {
-				const resultNotFoundMsg = ! res.data.results.length
-										? 'There are no more search results.'
+				const total = res.data.total;
+				const totalPagesCount = this.getPageCount( total, 20 );
+				const resultNotFoundMsg = ! res.data.hits.length
+										? 'There are no more search results. Please try a new search'
 										: '';
 				this.setState( {
-					results: res.data.results,
+					results: res.data.hits,
 					message: resultNotFoundMsg,
-					loading: false,
-					loadmore: false
+					totalResults: total,
+					totalPages: totalPagesCount,
+					currentPageNo: updatedPageNo,
+					loading: false
 				} )
 			} )
 			.catch( error => {
 				if ( axios.isCancel(error) || error ) {
 					this.setState({
 						loading: false,
-						message: 'Failed to fetch the data.'
+						message: 'Failed to fetch the data. Please check network'
 					})
 				}
 			} )
+	};
+
+	handleOnInputChange = ( event ) => {
+		const query = event.target.value;
+		if ( ! query ) {
+			this.setState( { query, results: {}, message: '', totalPages: 0, totalResults: 0 } );
+		} else {
+			this.setState( { query, message: '' }, () => {
+				// this.fetchSearchResults( 1, query );
+			} );
+		}
+	};
+
+	/**
+	 * Fetch results according to the prev or next page requests.
+	 *
+	 * @param {String} type 'prev' or 'next'
+	 */
+	handlePageClick = ( type ) => {
+		event.preventDefault();
+		const updatePageNo = 'prev' === type
+			? this.state.currentPageNo - 1
+			: this.state.currentPageNo + 1;
+
+		if( ! this.state.loading  ) {
+			this.setState( { loading: true, message: '' }, () => {
+				this.fetchSearchResults( updatePageNo, this.state.query );
+			} );
+		}
+	};
+
+	renderSearchResults = () => {
+		const { results } = this.state;
+
+		if ( Object.keys( results ).length && results.length ) {
+			return (
+				<div className="results-container">
+					{ results.map( result => {
+						return (
+							<a key={ result.id } href={ result.previewURL } className="result-item">
+								<h6 className="image-username">{result.user}</h6>
+								<div className="image-wrapper">
+									<img className="image" src={ result.previewURL } alt={`${result.username} image`}/>
+								</div>
+							</a>
+						)
+					} ) }
+
+				</div>
+			)
+		}
 	};
 
 	handleClick = () => {
@@ -71,85 +143,47 @@ class Search extends React.Component {
 		}
 	};
 
-	handleOnInputChange = ( event ) => {
-		const query = event.target.value;
-		if ( ! query ) {
-			this.setState( { query, results: {}, message: '' } );
-		} else {
-			this.setState( { query }, () => {
-			} );
-		}
-	};
-
-	renderSearchResults = () => {
-		const { results } = this.state;
-
-		if ( Object.keys( results ).length && results.length ) {
-			return (
-				<div className="results-container">
-					{ results.slice(0,this.state.visible).map( result => {
-						return (
-							<a key={ result.mal_id } href={ result.image_url } className="result-item">
-								<h6 className="image-username">{result.title}</h6>
-								<div className="image-wrapper">
-									<img className="image" src={ result.image_url } alt={`${result.title} image`}/>
-								</div>
-							</a>
-						)
-					} ) }
-
-				{ this.state.loadmore && results.slice(this.state.visible + 1).map( result => {
-						return (
-							<a key={ result.mal_id } href={ result.image_url } className="result-item">
-								<h6 className="image-username">{result.title}</h6>
-								<div className="image-wrapper">
-									<img className="image" src={ result.image_url } alt={`${result.title} image`}/>
-								</div>
-							</a>
-						)
-					} ) }
-				</div>
-			)
-		}
-  };
-
-  loadMore () {
-    this.setState({
-			loadmore: true,
-    })
-	}
-
 	render() {
-		const { query, loading, message } = this.state;
+		const { query, loading, message, currentPageNo, totalPages } = this.state;
+
+		const showPrevLink = 1 < currentPageNo;
+		const showNextLink = totalPages > currentPageNo;
+
 		return (
 			<div className="container">
-				{/*	Heading*/}
-				<h2 className="heading">Assignment Spinny</h2>
-				
-				{/* Search Input*/}
-				<label className="search-label" htmlFor="search-input">
-					<input
-						type="text"
-						name="query"
-						value={ query }
-						id="search-input"
-						placeholder="search for an anime, e.g Naruto"
-						onChange={this.handleOnInputChange}
-					/>
+			{/*	Heading*/}
+			<h2 className="heading">Assignment Spinny: Search with pagination</h2>
+			{/* Search Input*/}
+			<label className="search-label" htmlFor="search-input">
+				<input
+					type="text"
+					name="query"
+					value={ query }
+					id="search-input"
+					placeholder="search for an anime, e.g Batman."
+					onChange={this.handleOnInputChange}
+				/>
 				<button className="btn" onClick={this.handleClick}>GO</button>
-				</label>
+			</label>
 
-				{/*	Error Message*/}
+			{/*	Error Message*/}
 				{message && <p className="message">{ message }</p>}
 
-				{/*	Loader*/}
-				<img src={ Loader } className={`search-loading ${ loading ? 'show' : 'hide' }`} alt="loader"/>
+			{/*	Loader*/}
+			<img src={ Loader } className={`search-loading ${ loading ? 'show' : 'hide' }`} alt="loader"/>
 
-				{/*	Result*/}
-				{ this.renderSearchResults() }
+			{/*	Result*/}
+			{ this.renderSearchResults() }
 
-				{/*Load More*/}
-				{(this.state.results.length > 0 && !this.state.loadmore) && <button onClick={this.loadMore} type="button" className="load-more">Load more</button>} 
+			{/*Navigation*/}
+			<PageNavigation
+				loading={loading}
+				showPrevLink={showPrevLink}
+				showNextLink={showNextLink}
+				handlePrevClick={ () => this.handlePageClick('prev', event )}
+				handleNextClick={ () => this.handlePageClick('next', event )}
+			/>
+
 			</div>
 		)
 	}
