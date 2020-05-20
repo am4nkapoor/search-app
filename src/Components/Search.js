@@ -1,6 +1,5 @@
 /* eslint-disable no-restricted-globals */
 import React from 'react';
-// import '../Search.css';
 import axios from 'axios';
 import Loader from '../loader.gif';
 import PageNavigation from './PageNavigation';
@@ -38,8 +37,6 @@ class Search extends React.Component {
 	};
 
 	/**
-	 * Fetch the search results and update the state with the result.
-	 * Also cancels the previous query before making the new one.
 	 *
 	 * @param {int} updatedPageNo Updated Page No.
 	 * @param {String} query Search Query.
@@ -89,7 +86,6 @@ class Search extends React.Component {
 			this.setState( { query, results: {}, message: '', totalPages: 0, totalResults: 0 } );
 		} else {
 			this.setState( { query, message: '' }, () => {
-				// this.fetchSearchResults( 1, query );
 			} );
 		}
 	};
